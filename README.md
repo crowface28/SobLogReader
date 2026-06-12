@@ -1,5 +1,7 @@
 # Shards of Britannia Combat Log Reader
 
+[![Build and Publish](https://github.com/crowface28/SobLogReader/actions/workflows/build.yml/badge.svg)](https://github.com/crowface28/SobLogReader/actions/workflows/build.yml)
+
 <p align="center">
   <img src="Assets/logo.png" alt="Shards of Britannia Combat Log Reader Logo" width="400"/>
 </p>
