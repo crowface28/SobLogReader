@@ -12,6 +12,18 @@ A real-time combat log parser and metrics reader for **Shards of Britannia**. It
 
 ---
 
+## 🚀 Quick Start (Easy Setup)
+
+If you just want to run the tool without dealing with technical commands or code:
+
+1. Open your browser and go to the **[Releases](https://github.com/crowface28/SobLogReader/releases)** page on GitHub.
+2. Under the latest version, click on **`SobLogReader.exe`** to download it.
+3. Save it anywhere on your computer (like your Desktop or Downloads folder).
+4. Double-click the downloaded **`SobLogReader.exe`** file to start!
+   * *Note: If Windows SmartScreen displays a warning, click **"More Info"** and then **"Run anyway"**.*
+
+---
+
 ## Features
 
 - **Real-Time Log Polling**: Automatically polls the selected active log file for updates as they happen.
