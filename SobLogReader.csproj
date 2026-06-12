@@ -8,4 +8,13 @@
     <UseWPF>true</UseWPF>
   </PropertyGroup>
 
+<PropertyGroup Condition="'$(Configuration)' == 'Release'">
+	<PathMap>$(MSBuildProjectDirectory)=/src/SobLogReader</PathMap>
+
+	<Deterministic>true</Deterministic>
+
+	<DebugType>none</DebugType>
+	<DebugSymbols>false</DebugSymbols>
+</PropertyGroup>
+
 </Project>
