@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
@@ -71,6 +71,7 @@ namespace SobLogReader
                 Fights.Clear();
                 RawLogBox.Clear();
                 StatsPanel.Visibility = Visibility.Hidden;
+                WelcomePanel.Visibility = Visibility.Visible;
 
                 ReadNewLogLines();
                 _pollTimer.Start();
@@ -215,8 +216,9 @@ namespace SobLogReader
         /// </summary>
         private Fight GetOrCreateFight(string mobName, DateTime timestamp, bool isCombatAction)
         {
-            // Look for an existing encounter with this mob name that was active recently (within 10 seconds)
-            var existingFight = Fights.LastOrDefault(f => f.MobName == mobName && (timestamp - f.EndTime).TotalSeconds < 10);
+            // Look for an existing encounter with this mob name that was active recently (within 10 seconds).
+            // Changed to FirstOrDefault because the newest fights are now at the beginning of the collection.
+            var existingFight = Fights.FirstOrDefault(f => f.MobName == mobName && (timestamp - f.EndTime).TotalSeconds < 10);
 
             if (existingFight != null)
             {
@@ -233,7 +235,10 @@ namespace SobLogReader
             }
 
             var newFight = new Fight { MobName = mobName, StartTime = timestamp, EndTime = timestamp };
-            Fights.Add(newFight);
+
+            // Insert at index 0 so the newest encounters appear at the top of the UI list
+            Fights.Insert(0, newFight);
+
             return newFight;
         }
 
@@ -242,6 +247,7 @@ namespace SobLogReader
             if (FightsListBox.SelectedItem is Fight selectedFight)
             {
                 StatsPanel.Visibility = Visibility.Visible;
+                WelcomePanel.Visibility = Visibility.Collapsed;
                 UpdateStatsView(selectedFight);
             }
         }
