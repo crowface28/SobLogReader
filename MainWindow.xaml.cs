@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.IO;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Threading;
@@ -18,6 +20,8 @@ namespace SobLogReader
         private string _logFilePath;
         private long _lastFilePosition = 0;
         private DispatcherTimer _pollTimer;
+        private DateTime? _lastParsedTimestamp = null;
+        private int _dateOffsetDays = 0;
 
         // ObservableCollection automatically updates the bound WPF ListBox when new fights are added
         public ObservableCollection<Fight> Fights { get; set; } = new ObservableCollection<Fight>();
@@ -72,6 +76,8 @@ namespace SobLogReader
                 RawLogBox.Clear();
                 StatsPanel.Visibility = Visibility.Hidden;
                 WelcomePanel.Visibility = Visibility.Visible;
+                _lastParsedTimestamp = null;
+                _dateOffsetDays = 0;
 
                 ReadNewLogLines();
                 _pollTimer.Start();
@@ -132,7 +138,20 @@ namespace SobLogReader
             var match = _timestampRegex.Match(line);
             if (!match.Success) return;
 
-            DateTime timestamp = DateTime.Parse(match.Groups[1].Value);
+            DateTime timePart = DateTime.Parse(match.Groups[1].Value);
+            DateTime timestamp = timePart.AddDays(_dateOffsetDays);
+
+            if (_lastParsedTimestamp.HasValue)
+            {
+                // If the time jumps backwards significantly (e.g. crossing midnight), increment the day offset
+                if (timestamp < _lastParsedTimestamp.Value && (_lastParsedTimestamp.Value - timestamp).TotalHours > 20)
+                {
+                    _dateOffsetDays++;
+                    timestamp = timestamp.AddDays(1);
+                }
+            }
+            _lastParsedTimestamp = timestamp;
+
             string rawAction = match.Groups[2].Value;
 
             // Clean the string of hex colors before parsing against the combat regexes
@@ -310,11 +329,54 @@ namespace SobLogReader
     /// Data model representing a single, distinct combat encounter.
     /// Tracks time boundaries and maintains isolated lists of combat events for stat generation.
     /// </summary>
-    public class Fight
+    public class Fight : INotifyPropertyChanged
     {
-        public string MobName { get; set; }
-        public DateTime StartTime { get; set; }
-        public DateTime EndTime { get; set; }
+        private string _mobName = string.Empty;
+        private DateTime _startTime;
+        private DateTime _endTime;
+
+        public string MobName
+        {
+            get => _mobName;
+            set
+            {
+                if (_mobName != value)
+                {
+                    _mobName = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public DateTime StartTime
+        {
+            get => _startTime;
+            set
+            {
+                if (_startTime != value)
+                {
+                    _startTime = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(DurationSeconds));
+                    OnPropertyChanged(nameof(DurationStr));
+                }
+            }
+        }
+
+        public DateTime EndTime
+        {
+            get => _endTime;
+            set
+            {
+                if (_endTime != value)
+                {
+                    _endTime = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(DurationSeconds));
+                    OnPropertyChanged(nameof(DurationStr));
+                }
+            }
+        }
 
         // Prevents divide-by-zero exceptions for instantaneous encounters
         public double DurationSeconds => Math.Max((EndTime - StartTime).TotalSeconds, 1.0);
@@ -330,5 +392,12 @@ namespace SobLogReader
 
         public List<string> Loot { get; set; } = new List<string>();
         public List<string> RawLogs { get; set; } = new List<string>();
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+
+        protected void OnPropertyChanged([CallerMemberName] string? propertyName = null)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
     }
 }
