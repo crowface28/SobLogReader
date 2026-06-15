@@ -39,27 +39,32 @@ If you just want to run the tool without dealing with technical commands or code
 
 ---
 
-## How to Build & Run
-
-### Prerequisites
-
-- [.NET SDK 10.0](https://dotnet.microsoft.com/en-us/download) (or newer)
-- Windows OS (WPF application)
-
-### Run from Command Line
-
-To compile and launch the application immediately:
-```powershell
-dotnet run -c Release
+## 🛠️ How to Build from Source (Step-by-Step)
+ 
+If you want to compile the code yourself instead of downloading the pre-built release:
+ 
+### 1. Download & Extract the Code
+1. Click the green **Code** button at the top right of this GitHub repository page.
+2. Select **Download ZIP** from the menu.
+3. Once downloaded, extract the contents of the ZIP file to a folder on your computer (for example, on your Desktop).
+ 
+### 2. Install the Prerequisites
+Make sure you have the [.NET SDK 10.0](https://dotnet.microsoft.com/en-us/download) installed on your computer.
+ 
+### 3. Open a Command Prompt in the Folder
+1. Open the folder where you extracted the source files.
+2. Click on the address bar at the top of the folder window (where it shows the folder path).
+3. Type `cmd` and press **Enter**. A black command prompt window will open automatically focused on that directory.
+ 
+### 4. Compile the Executable
+In the command prompt window, type the following command and press **Enter**:
+```cmd
+dotnet publish -c Release
 ```
-
-### Build Executable
-
-To build the optimized release binary:
-```powershell
-dotnet build -c Release
-```
-The compiled executable will be generated at `bin\Release\net10.0-windows\SobLogReader.exe`.
+ 
+### 5. Find the Built Application
+Once the build completes successfully, your single-file executable is ready. You can find it at this location inside your folder:
+`bin\Release\net10.0-windows\win-x64\publish\SobLogReader.exe`
 
 ---
 
