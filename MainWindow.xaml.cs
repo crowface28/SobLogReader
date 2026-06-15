@@ -101,18 +101,31 @@ namespace SobLogReader
                 {
                     // Handle edge case where the file was cleared or rolled over by the game client
                     if (fs.Length < _lastFilePosition)
+                    {
                         _lastFilePosition = 0;
-
+                        Fights.Clear();
+                        RawLogBox.Clear();
+                        StatsPanel.Visibility = Visibility.Hidden;
+                        WelcomePanel.Visibility = Visibility.Visible;
+                    }
+ 
                     fs.Seek(_lastFilePosition, SeekOrigin.Begin);
-
+ 
                     using (var reader = new StreamReader(fs))
                     {
                         string line;
                         while ((line = reader.ReadLine()) != null)
                         {
-                            ParseLogLine(line);
+                            try
+                            {
+                                ParseLogLine(line);
+                            }
+                            catch (Exception ex)
+                            {
+                                System.Diagnostics.Debug.WriteLine($"Error parsing log line: {ex.Message}");
+                            }
                         }
-
+ 
                         // Cache the position before the stream is disposed so the next poll resumes correctly
                         _lastFilePosition = fs.Position;
                     }

@@ -11,6 +11,8 @@ on:
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 jobs:
   build:
@@ -33,6 +35,11 @@ jobs:
 
     - name: Publish Single-File Executable
       run: dotnet publish -c Release
+
+    - name: Generate Artifact Attestation
+      uses: actions/attest@v4
+      with:
+        subject-path: bin/Release/net10.0-windows/win-x64/publish/SobLogReader.exe
 
     - name: Upload Build Artifact
       uses: actions/upload-artifact@v4
