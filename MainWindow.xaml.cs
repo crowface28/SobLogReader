@@ -257,8 +257,7 @@ namespace SobLogReader
             {
                 existingFight = Fights.FirstOrDefault(f => f.Id == mobId);
             }
-
-            if (existingFight == null && !string.IsNullOrEmpty(mobName))
+            else if (!string.IsNullOrEmpty(mobName))
             {
                 // Fallback for lines without ID
                 existingFight = Fights.FirstOrDefault(f => f.MobName == mobName);
