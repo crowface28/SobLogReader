@@ -29,6 +29,7 @@ namespace SobLogReader
 
         // Regex Patterns: Extracts target mob names and damage/miss values depending on the action type
         private readonly Regex _playerHitRegex = new Regex(@"You swing at (?<mob>.+?)(?: and critically hit)?\s+for (?<dmg>\d+)", RegexOptions.Compiled);
+        private readonly Regex _playerSpellHitRegex = new Regex(@"Your (?<spell>.+?)\s+hits (?<mob>.+?)\s+for (?<dmg>\d+)", RegexOptions.Compiled);
         private readonly Regex _mobHitRegex = new Regex(@"(?:from (?<mob>.+?)\s+damages you|(?<mob>.+?)\s+swings at you).*?for (?<dmg>\d+)", RegexOptions.Compiled);
         private readonly Regex _petHitRegex = new Regex(@"Your pet .*? swings at (?<mob>.+?)\s+for (?<dmg>\d+)", RegexOptions.Compiled);
         private readonly Regex _playerMissRegex = new Regex(@"You miss (?<mob>.+?)$", RegexOptions.Compiled);
@@ -159,7 +160,7 @@ namespace SobLogReader
                     mobId = targetID;
                     mobName = targetName.Replace(" Corpse", "").Trim();
                 }
-                else if (_playerHitRegex.IsMatch(action) || _playerMissRegex.IsMatch(action) || _petHitRegex.IsMatch(action) || _petMissRegex.IsMatch(action))
+                else if (_playerHitRegex.IsMatch(action) || _playerSpellHitRegex.IsMatch(action) || _playerMissRegex.IsMatch(action) || _petHitRegex.IsMatch(action) || _petMissRegex.IsMatch(action))
                 {
                     mobId = targetID;
                     mobName = targetName;
@@ -181,12 +182,20 @@ namespace SobLogReader
             Fight fight = GetOrCreateFight(mobId, mobName, timestamp);
 
             fight.RawLogs.Add(line);
-            fight.EndTime = timestamp; // Expand the fight duration to this latest event
+            if (logType != "Loot")
+            {
+                fight.EndTime = timestamp; // Expand the fight duration to this latest event
+            }
 
             // Evaluate the specific event type and record the data
             if (_playerHitRegex.IsMatch(action))
             {
                 var m = _playerHitRegex.Match(action);
+                fight.PlayerHits.Add(int.Parse(m.Groups["dmg"].Value));
+            }
+            else if (_playerSpellHitRegex.IsMatch(action))
+            {
+                var m = _playerSpellHitRegex.Match(action);
                 fight.PlayerHits.Add(int.Parse(m.Groups["dmg"].Value));
             }
             else if (_mobHitRegex.IsMatch(action))
@@ -233,6 +242,7 @@ namespace SobLogReader
         private string ExtractMobName(string action)
         {
             if (_playerHitRegex.IsMatch(action)) return _playerHitRegex.Match(action).Groups["mob"].Value.Trim();
+            if (_playerSpellHitRegex.IsMatch(action)) return _playerSpellHitRegex.Match(action).Groups["mob"].Value.Trim();
             if (_mobHitRegex.IsMatch(action)) return _mobHitRegex.Match(action).Groups["mob"].Value.Trim();
             if (_petHitRegex.IsMatch(action)) return _petHitRegex.Match(action).Groups["mob"].Value.Trim();
             if (_playerMissRegex.IsMatch(action)) return _playerMissRegex.Match(action).Groups["mob"].Value.Trim();
@@ -259,8 +269,14 @@ namespace SobLogReader
             }
             else if (!string.IsNullOrEmpty(mobName))
             {
-                // Fallback for lines without ID
-                existingFight = Fights.FirstOrDefault(f => f.MobName == mobName);
+                // Fallback for lines without ID: match the most recent active, unlooted fight within a 15s window
+                existingFight = Fights.FirstOrDefault(f => f.MobName == mobName && !f.Loot.Any() && (timestamp - f.EndTime).TotalSeconds < 15);
+
+                if (existingFight == null)
+                {
+                    // If none match, look for any fight of that name within a 15s window
+                    existingFight = Fights.FirstOrDefault(f => f.MobName == mobName && (timestamp - f.EndTime).TotalSeconds < 15);
+                }
             }
 
             if (existingFight != null)
