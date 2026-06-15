@@ -30,10 +30,13 @@ namespace SobLogReader
         // Regex Patterns: Extracts target mob names and damage/miss values depending on the action type
         private readonly Regex _playerHitRegex = new Regex(@"You swing at (?<mob>.+?)(?: and critically hit)?\s+for (?<dmg>\d+)", RegexOptions.Compiled);
         private readonly Regex _playerSpellHitRegex = new Regex(@"Your (?<spell>.+?)\s+hits (?<mob>.+?)\s+for (?<dmg>\d+)", RegexOptions.Compiled);
+        private readonly Regex _petSpellHitRegex = new Regex(@"Your pet (?<pet>.+?)\s+(?<spell>[^\s]+)\s+hits (?<mob>.+?)\s+for (?<dmg>\d+)", RegexOptions.Compiled);
         private readonly Regex _mobHitRegex = new Regex(@"(?:from (?<mob>.+?)\s+damages you|(?<mob>.+?)\s+swings at you).*?for (?<dmg>\d+)", RegexOptions.Compiled);
+        private readonly Regex _mobHitPetRegex = new Regex(@"(?:from (?<mob>.+?)\s+damages your pet|(?<mob>.+?)\s+swings at your pet).*?for (?<dmg>\d+)", RegexOptions.Compiled);
         private readonly Regex _petHitRegex = new Regex(@"Your pet .*? swings at (?<mob>.+?)\s+for (?<dmg>\d+)", RegexOptions.Compiled);
         private readonly Regex _playerMissRegex = new Regex(@"You miss (?<mob>.+?)$", RegexOptions.Compiled);
         private readonly Regex _mobMissRegex = new Regex(@"(?<mob>.+?) misses you", RegexOptions.Compiled);
+        private readonly Regex _mobMissPetRegex = new Regex(@"(?<mob>.+?) misses your pet", RegexOptions.Compiled);
         private readonly Regex _petMissRegex = new Regex(@"Your pet .*? misses (?<mob>.+?)$", RegexOptions.Compiled);
 
         // Regex: Extracts item names from loot actions
@@ -160,12 +163,12 @@ namespace SobLogReader
                     mobId = targetID;
                     mobName = targetName.Replace(" Corpse", "").Trim();
                 }
-                else if (_playerHitRegex.IsMatch(action) || _playerSpellHitRegex.IsMatch(action) || _playerMissRegex.IsMatch(action) || _petHitRegex.IsMatch(action) || _petMissRegex.IsMatch(action))
+                else if (_playerHitRegex.IsMatch(action) || _playerSpellHitRegex.IsMatch(action) || _petSpellHitRegex.IsMatch(action) || _playerMissRegex.IsMatch(action) || _petHitRegex.IsMatch(action) || _petMissRegex.IsMatch(action))
                 {
                     mobId = targetID;
                     mobName = targetName;
                 }
-                else if (_mobHitRegex.IsMatch(action) || _mobMissRegex.IsMatch(action))
+                else if (_mobHitRegex.IsMatch(action) || _mobHitPetRegex.IsMatch(action) || _mobMissRegex.IsMatch(action) || _mobMissPetRegex.IsMatch(action))
                 {
                     mobId = sourceID;
                     mobName = sourceName;
@@ -193,6 +196,11 @@ namespace SobLogReader
                 var m = _playerHitRegex.Match(action);
                 fight.PlayerHits.Add(int.Parse(m.Groups["dmg"].Value));
             }
+            else if (_petSpellHitRegex.IsMatch(action))
+            {
+                var m = _petSpellHitRegex.Match(action);
+                fight.PetHits.Add(int.Parse(m.Groups["dmg"].Value));
+            }
             else if (_playerSpellHitRegex.IsMatch(action))
             {
                 var m = _playerSpellHitRegex.Match(action);
@@ -201,6 +209,11 @@ namespace SobLogReader
             else if (_mobHitRegex.IsMatch(action))
             {
                 var m = _mobHitRegex.Match(action);
+                fight.MobHits.Add(int.Parse(m.Groups["dmg"].Value));
+            }
+            else if (_mobHitPetRegex.IsMatch(action))
+            {
+                var m = _mobHitPetRegex.Match(action);
                 fight.MobHits.Add(int.Parse(m.Groups["dmg"].Value));
             }
             else if (_petHitRegex.IsMatch(action))
@@ -213,6 +226,10 @@ namespace SobLogReader
                 fight.PlayerMisses++;
             }
             else if (_mobMissRegex.IsMatch(action))
+            {
+                fight.MobMisses++;
+            }
+            else if (_mobMissPetRegex.IsMatch(action))
             {
                 fight.MobMisses++;
             }
@@ -242,11 +259,14 @@ namespace SobLogReader
         private string ExtractMobName(string action)
         {
             if (_playerHitRegex.IsMatch(action)) return _playerHitRegex.Match(action).Groups["mob"].Value.Trim();
+            if (_petSpellHitRegex.IsMatch(action)) return _petSpellHitRegex.Match(action).Groups["mob"].Value.Trim();
             if (_playerSpellHitRegex.IsMatch(action)) return _playerSpellHitRegex.Match(action).Groups["mob"].Value.Trim();
             if (_mobHitRegex.IsMatch(action)) return _mobHitRegex.Match(action).Groups["mob"].Value.Trim();
+            if (_mobHitPetRegex.IsMatch(action)) return _mobHitPetRegex.Match(action).Groups["mob"].Value.Trim();
             if (_petHitRegex.IsMatch(action)) return _petHitRegex.Match(action).Groups["mob"].Value.Trim();
             if (_playerMissRegex.IsMatch(action)) return _playerMissRegex.Match(action).Groups["mob"].Value.Trim();
             if (_mobMissRegex.IsMatch(action)) return _mobMissRegex.Match(action).Groups["mob"].Value.Trim();
+            if (_mobMissPetRegex.IsMatch(action)) return _mobMissPetRegex.Match(action).Groups["mob"].Value.Trim();
             if (_petMissRegex.IsMatch(action)) return _petMissRegex.Match(action).Groups["mob"].Value.Trim();
 
             if (_lootRegex.IsMatch(action) && Fights.Any())
