@@ -20,17 +20,12 @@ namespace SobLogReader
         private string _logFilePath;
         private long _lastFilePosition = 0;
         private DispatcherTimer _pollTimer;
-        private DateTime? _lastParsedTimestamp = null;
-        private int _dateOffsetDays = 0;
 
         // ObservableCollection automatically updates the bound WPF ListBox when new fights are added
         public ObservableCollection<Fight> Fights { get; set; } = new ObservableCollection<Fight>();
 
         // Regex: Strips UI hex color codes (e.g., [FFFFFF]) and closing tags ([-]) from raw log lines
         private readonly Regex _colorTagRegex = new Regex(@"\[[A-Fa-f0-9]{6}\]|\[-\]", RegexOptions.Compiled);
-
-        // Regex: Identifies valid combat lines and separates the timestamp from the action text
-        private readonly Regex _timestampRegex = new Regex(@"^(\d{1,2}:\d{2}:\d{2} [AP]M)\s+\[Combat\]\s+(.+)$", RegexOptions.Compiled);
 
         // Regex Patterns: Extracts target mob names and damage/miss values depending on the action type
         private readonly Regex _playerHitRegex = new Regex(@"You swing at (?<mob>.+?)(?: and critically hit)?\s+for (?<dmg>\d+)", RegexOptions.Compiled);
@@ -76,8 +71,6 @@ namespace SobLogReader
                 RawLogBox.Clear();
                 StatsPanel.Visibility = Visibility.Hidden;
                 WelcomePanel.Visibility = Visibility.Visible;
-                _lastParsedTimestamp = null;
-                _dateOffsetDays = 0;
 
                 ReadNewLogLines();
                 _pollTimer.Start();
@@ -135,35 +128,57 @@ namespace SobLogReader
         {
             if (!line.Contains("[Combat]")) return;
 
-            var match = _timestampRegex.Match(line);
-            if (!match.Success) return;
+            string[] parts = line.Split('|');
+            if (parts.Length < 7) return; // Ignore old format lines
 
-            DateTime timePart = DateTime.Parse(match.Groups[1].Value);
-            DateTime timestamp = timePart.AddDays(_dateOffsetDays);
+            string logType = parts[0];
+            string timestampStr = parts[1];
+            string targetName = parts[parts.Length - 1];
+            string targetID = parts[parts.Length - 2];
+            string sourceName = parts[parts.Length - 3];
+            string sourceID = parts[parts.Length - 4];
+            string rawAction = string.Join("|", parts.Skip(2).Take(parts.Length - 6));
 
-            if (_lastParsedTimestamp.HasValue)
-            {
-                // If the time jumps backwards significantly (e.g. crossing midnight), increment the day offset
-                if (timestamp < _lastParsedTimestamp.Value && (_lastParsedTimestamp.Value - timestamp).TotalHours > 20)
-                {
-                    _dateOffsetDays++;
-                    timestamp = timestamp.AddDays(1);
-                }
-            }
-            _lastParsedTimestamp = timestamp;
-
-            string rawAction = match.Groups[2].Value;
+            if (!DateTime.TryParse(timestampStr, out DateTime timestamp))
+                return;
 
             // Clean the string of hex colors before parsing against the combat regexes
             string action = _colorTagRegex.Replace(rawAction, "").Trim();
+            if (action.StartsWith("[Combat]"))
+            {
+                action = action.Substring(8).Trim();
+            }
 
-            string targetMob = ExtractMobName(action);
-            if (string.IsNullOrEmpty(targetMob)) return;
+            string mobId = null;
+            string mobName = null;
 
-            // Determine if the action signifies the end of a fight (looting) vs active combat
-            bool isLootAction = _lootRegex.IsMatch(action);
+            if (!string.IsNullOrEmpty(sourceID) && !string.IsNullOrEmpty(targetID))
+            {
+                if (logType == "Loot")
+                {
+                    mobId = targetID;
+                    mobName = targetName.Replace(" Corpse", "").Trim();
+                }
+                else if (_playerHitRegex.IsMatch(action) || _playerMissRegex.IsMatch(action) || _petHitRegex.IsMatch(action) || _petMissRegex.IsMatch(action))
+                {
+                    mobId = targetID;
+                    mobName = targetName;
+                }
+                else if (_mobHitRegex.IsMatch(action) || _mobMissRegex.IsMatch(action))
+                {
+                    mobId = sourceID;
+                    mobName = sourceName;
+                }
+            }
 
-            Fight fight = GetOrCreateFight(targetMob, timestamp, !isLootAction);
+            if (string.IsNullOrEmpty(mobName))
+            {
+                mobName = ExtractMobName(action);
+            }
+
+            if (string.IsNullOrEmpty(mobName)) return;
+
+            Fight fight = GetOrCreateFight(mobId, mobName, timestamp);
 
             fight.RawLogs.Add(line);
             fight.EndTime = timestamp; // Expand the fight duration to this latest event
@@ -196,10 +211,13 @@ namespace SobLogReader
             {
                 fight.PetMisses++;
             }
-            else if (isLootAction)
+            else if (logType == "Loot")
             {
                 var m = _lootRegex.Match(action);
-                fight.Loot.Add(m.Groups["loot"].Value.Trim());
+                if (m.Success)
+                {
+                    fight.Loot.Add(m.Groups["loot"].Value.Trim());
+                }
             }
 
             // Real-time UI update if the user is currently viewing this specific encounter
@@ -210,8 +228,7 @@ namespace SobLogReader
         }
 
         /// <summary>
-        /// Determines the target of the action. Loot actions lack an explicit target in the log, 
-        /// so they default to the most recently engaged entity.
+        /// Determines the target of the action if IDs are missing.
         /// </summary>
         private string ExtractMobName(string action)
         {
@@ -222,38 +239,37 @@ namespace SobLogReader
             if (_mobMissRegex.IsMatch(action)) return _mobMissRegex.Match(action).Groups["mob"].Value.Trim();
             if (_petMissRegex.IsMatch(action)) return _petMissRegex.Match(action).Groups["mob"].Value.Trim();
 
-            // Fallback for loot: Attach to the most recently updated combat encounter
             if (_lootRegex.IsMatch(action) && Fights.Any())
             {
-                return Fights.OrderByDescending(f => f.EndTime).FirstOrDefault()?.MobName;
+                return Fights.FirstOrDefault()?.MobName;
             }
             return null;
         }
 
         /// <summary>
-        /// Retrieves an existing encounter or instantiates a new one based on time and loot heuristics.
+        /// Retrieves an existing encounter or instantiates a new one based on Mob ID.
         /// </summary>
-        private Fight GetOrCreateFight(string mobName, DateTime timestamp, bool isCombatAction)
+        private Fight GetOrCreateFight(string mobId, string mobName, DateTime timestamp)
         {
-            // Look for an existing encounter with this mob name that was active recently (within 10 seconds).
-            // Changed to FirstOrDefault because the newest fights are now at the beginning of the collection.
-            var existingFight = Fights.FirstOrDefault(f => f.MobName == mobName && (timestamp - f.EndTime).TotalSeconds < 10);
+            Fight existingFight = null;
+
+            if (!string.IsNullOrEmpty(mobId))
+            {
+                existingFight = Fights.FirstOrDefault(f => f.Id == mobId);
+            }
+
+            if (existingFight == null && !string.IsNullOrEmpty(mobName))
+            {
+                // Fallback for lines without ID
+                existingFight = Fights.FirstOrDefault(f => f.MobName == mobName);
+            }
 
             if (existingFight != null)
             {
-                // Heuristic: If we are actively swinging at a mob, but its existing record already contains loot, 
-                // it implies the previous mob died and this is a new spawn with the exact same name.
-                if (isCombatAction && existingFight.Loot.Any())
-                {
-                    // Fall through to create a new Fight object below
-                }
-                else
-                {
-                    return existingFight;
-                }
+                return existingFight;
             }
 
-            var newFight = new Fight { MobName = mobName, StartTime = timestamp, EndTime = timestamp };
+            var newFight = new Fight { Id = mobId, MobName = mobName, StartTime = timestamp, EndTime = timestamp };
 
             // Insert at index 0 so the newest encounters appear at the top of the UI list
             Fights.Insert(0, newFight);
@@ -331,6 +347,7 @@ namespace SobLogReader
     /// </summary>
     public class Fight : INotifyPropertyChanged
     {
+        public string Id { get; set; }
         private string _mobName = string.Empty;
         private DateTime _startTime;
         private DateTime _endTime;
