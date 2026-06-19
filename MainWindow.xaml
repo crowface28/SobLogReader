@@ -46,6 +46,7 @@
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
                     <TextBlock Text="Encounters" FontWeight="Bold" Margin="10,10,10,5" Foreground="#569CD6"/>
                     
@@ -73,7 +74,7 @@
                         </TextBlock>
                     </Grid>
 
-                    <ListBox x:Name="FightsListBox" Grid.Row="2" Background="Transparent" BorderThickness="0" Foreground="#D4D4D4" SelectionChanged="FightsListBox_SelectionChanged">
+                    <ListBox x:Name="FightsListBox" Grid.Row="2" Background="Transparent" BorderThickness="0" Foreground="#D4D4D4" SelectionMode="Extended" SelectionChanged="FightsListBox_SelectionChanged">
                         <ListBox.ItemTemplate>
                             <DataTemplate>
                                 <StackPanel Margin="5">
@@ -83,6 +84,16 @@
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>
+
+                    <Button x:Name="SessionStatsButton" Grid.Row="3" Content="Summarize Selected (0)" 
+                            Margin="10" Height="36" Background="#0E639C" Foreground="White" BorderThickness="0" FontWeight="Bold"
+                            Cursor="Hand" Visibility="Collapsed" Click="SessionStatsButton_Click">
+                        <Button.Resources>
+                            <Style TargetType="Border">
+                                <Setter Property="CornerRadius" Value="4"/>
+                            </Style>
+                        </Button.Resources>
+                    </Button>
                 </Grid>
             </Border>
 
@@ -164,7 +175,81 @@
 
                             <TextBlock Grid.Row="3" Text="Loot Collected" FontWeight="Bold" Foreground="#DCDCAA" Margin="5,0,0,5"/>
 
-                            <ListBox Grid.Row="4" x:Name="StatLoot" Background="#1E1E1E" BorderThickness="1" BorderBrush="#333" Foreground="#D4D4D4" ScrollViewer.VerticalScrollBarVisibility="Auto"/>
+                            <ListBox Grid.Row="4" x:Name="StatLoot" Background="#1E1E1E" BorderThickness="1" BorderBrush="#333" Foreground="#D4D4D4" ScrollViewer.VerticalScrollBarVisibility="Auto" PreviewMouseWheel="ListBox_PreviewMouseWheel"/>
+                        </Grid>
+                    </ScrollViewer>
+
+                    <!-- Session Stats Panel (starts Collapsed) -->
+                    <ScrollViewer x:Name="SessionStatsPanel" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                        <Grid Margin="15">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <!-- Session Header -->
+                            <StackPanel Grid.Row="0" Margin="0,0,0,15">
+                                <TextBlock Text="SESSION SUMMARY" FontSize="20" FontWeight="Bold" Foreground="#CE9178"/>
+                                <TextBlock x:Name="SessionTitleText" Text="0 Fights | Total Duration: 0s" FontSize="14" Foreground="#888" Margin="0,2,0,0"/>
+                            </StackPanel>
+
+                            <!-- Player & Mob Stats -->
+                            <UniformGrid Grid.Row="1" Columns="2" Margin="0,0,0,15">
+                                <StackPanel Margin="5">
+                                    <TextBlock Text="Player Damage (Session)" FontWeight="Bold" Foreground="#C586C0"/>
+                                    <TextBlock x:Name="SessionPlayerDmg" Text="Max: 0 | Min: 0 | Avg: 0"/>
+                                    <TextBlock x:Name="SessionPlayerDps" Text="DPS: 0.0" FontWeight="SemiBold"/>
+                                    <TextBlock x:Name="SessionPlayerAcc" Text="Hit Rate: 0% (0 Hits / 0 Misses)"/>
+                                </StackPanel>
+
+                                <StackPanel Margin="5">
+                                    <TextBlock Text="Incoming Damage (Session)" FontWeight="Bold" Foreground="#F44336"/>
+                                    <TextBlock x:Name="SessionMobDmg" Text="Max: 0 | Min: 0 | Avg: 0"/>
+                                    <TextBlock x:Name="SessionMobDps" Text="DPS: 0.0" FontWeight="SemiBold"/>
+                                    <TextBlock x:Name="SessionMobAcc" Text="Hit Rate: 0% (0 Hits / 0 Misses)"/>
+                                </StackPanel>
+                            </UniformGrid>
+
+                            <!-- Pet Stats (Total & Breakdown) -->
+                            <StackPanel Grid.Row="2" Margin="5,0,0,15">
+                                <TextBlock Text="Pet Damage (Session Total)" FontWeight="Bold" Foreground="#CE9178" Margin="0,0,0,2"/>
+                                <TextBlock x:Name="SessionPetDmg" Text="Max: 0 | Min: 0 | Avg: 0"/>
+                                <TextBlock x:Name="SessionPetDps" Text="DPS: 0.0" FontWeight="SemiBold"/>
+                                <TextBlock x:Name="SessionPetAcc" Text="Hit Rate: 0% (0 Hits / 0 Misses)" Margin="0,0,0,6"/>
+                                
+                                <!-- Session Individual Pets Breakdown -->
+                                <TextBlock Text="Pet Breakdown" FontWeight="Bold" Foreground="#CE9178" FontSize="11" Margin="0,0,0,4"/>
+                                <ItemsControl x:Name="SessionPetBreakdownList">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Background="#2D2D30" BorderBrush="#3F3F46" BorderThickness="1" CornerRadius="4" Margin="0,0,0,6" Padding="8">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <StackPanel Grid.Column="0">
+                                                        <TextBlock Text="{Binding Name}" FontWeight="Bold" Foreground="#569CD6" FontSize="12"/>
+                                                        <TextBlock Text="{Binding DamageDetails}" FontSize="11" Foreground="#AAA" Margin="0,2,0,0"/>
+                                                        <TextBlock Text="{Binding AccuracyDetails}" FontSize="11" Foreground="#AAA"/>
+                                                    </StackPanel>
+                                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="10,0,0,0">
+                                                        <TextBlock Text="{Binding TotalDamageStr}" FontWeight="Bold" HorizontalAlignment="Right" Foreground="#D4D4D4"/>
+                                                        <TextBlock Text="{Binding DpsStr}" FontWeight="SemiBold" Foreground="#CE9178" HorizontalAlignment="Right"/>
+                                                    </StackPanel>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+
+                            <TextBlock Grid.Row="3" Text="Session Loot Consolidated" FontWeight="Bold" Foreground="#DCDCAA" Margin="5,0,0,5"/>
+
+                            <ListBox Grid.Row="4" x:Name="SessionLootList" Background="#1E1E1E" BorderThickness="1" BorderBrush="#333" Foreground="#D4D4D4" ScrollViewer.VerticalScrollBarVisibility="Auto" MinHeight="100" PreviewMouseWheel="ListBox_PreviewMouseWheel"/>
                         </Grid>
                     </ScrollViewer>
                 </Grid>

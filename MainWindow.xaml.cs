@@ -8,6 +8,7 @@ using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Data;
+using System.Windows.Input;
 using System.Windows.Threading;
 
 namespace SobLogReader
@@ -343,12 +344,225 @@ namespace SobLogReader
 
         private void FightsListBox_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
         {
-            if (FightsListBox.SelectedItem is Fight selectedFight)
+            int selectedCount = FightsListBox.SelectedItems.Count;
+
+            if (selectedCount > 1)
             {
+                SessionStatsButton.Visibility = Visibility.Visible;
+                SessionStatsButton.Content = $"Summarize Session ({selectedCount} fights)";
+            }
+            else
+            {
+                SessionStatsButton.Visibility = Visibility.Collapsed;
+            }
+
+            if (selectedCount == 1)
+            {
+                SessionStatsPanel.Visibility = Visibility.Collapsed;
                 StatsPanel.Visibility = Visibility.Visible;
                 WelcomePanel.Visibility = Visibility.Collapsed;
-                UpdateStatsView(selectedFight);
+                if (FightsListBox.SelectedItem is Fight selectedFight)
+                {
+                    UpdateStatsView(selectedFight);
+                }
             }
+            else if (selectedCount == 0)
+            {
+                SessionStatsPanel.Visibility = Visibility.Collapsed;
+                StatsPanel.Visibility = Visibility.Collapsed;
+                WelcomePanel.Visibility = Visibility.Visible;
+            }
+        }
+
+        private void SessionStatsButton_Click(object sender, RoutedEventArgs e)
+        {
+            var selectedFights = FightsListBox.SelectedItems.Cast<Fight>().ToList();
+            if (selectedFights.Count < 2) return;
+
+            StatsPanel.Visibility = Visibility.Collapsed;
+            WelcomePanel.Visibility = Visibility.Collapsed;
+            SessionStatsPanel.Visibility = Visibility.Visible;
+
+            UpdateSessionStatsView(selectedFights);
+        }
+
+        private void UpdateSessionStatsView(List<Fight> selectedFights)
+        {
+            int fightCount = selectedFights.Count;
+            double totalDurationSeconds = selectedFights.Sum(f => f.DurationSeconds);
+            string totalDurationStr = $"{(int)selectedFights.Sum(f => (f.EndTime - f.StartTime).TotalSeconds)}s";
+
+            SessionTitleText.Text = $"{fightCount} Fights | Total Duration: {totalDurationStr}";
+
+            // 1. Player Damage Stats Processing
+            var allPlayerHits = selectedFights.SelectMany(f => f.PlayerHits).ToList();
+            double playerTotal = allPlayerHits.Sum();
+            int playerMax = allPlayerHits.Any() ? allPlayerHits.Max() : 0;
+            int playerMin = allPlayerHits.Any() ? allPlayerHits.Min() : 0;
+            double playerAvg = allPlayerHits.Any() ? allPlayerHits.Average() : 0;
+            int playerMisses = selectedFights.Sum(f => f.PlayerMisses);
+            int playerSwings = allPlayerHits.Count + playerMisses;
+            double playerHitRate = playerSwings > 0 ? (double)allPlayerHits.Count / playerSwings * 100 : 0;
+
+            SessionPlayerDmg.Text = $"Max: {playerMax} | Min: {playerMin} | Avg: {playerAvg:F1}";
+            SessionPlayerDps.Text = $"DPS: {(totalDurationSeconds > 0 ? playerTotal / totalDurationSeconds : playerTotal):F2}";
+            SessionPlayerAcc.Text = $"Hit Rate: {playerHitRate:F1}% ({allPlayerHits.Count} Hits / {playerMisses} Misses)";
+
+            // 2. Mob Damage Stats Processing
+            var allMobHits = selectedFights.SelectMany(f => f.MobHits).ToList();
+            double mobTotal = allMobHits.Sum();
+            int mobMax = allMobHits.Any() ? allMobHits.Max() : 0;
+            int mobMin = allMobHits.Any() ? allMobHits.Min() : 0;
+            double mobAvg = allMobHits.Any() ? allMobHits.Average() : 0;
+            int mobMisses = selectedFights.Sum(f => f.MobMisses);
+            int mobSwings = allMobHits.Count + mobMisses;
+            double mobHitRate = mobSwings > 0 ? (double)allMobHits.Count / mobSwings * 100 : 0;
+
+            SessionMobDmg.Text = $"Max: {mobMax} | Min: {mobMin} | Avg: {mobAvg:F1}";
+            SessionMobDps.Text = $"DPS: {(totalDurationSeconds > 0 ? mobTotal / totalDurationSeconds : mobTotal):F2}";
+            SessionMobAcc.Text = $"Hit Rate: {mobHitRate:F1}% ({allMobHits.Count} Hits / {mobMisses} Misses)";
+
+            // 3. Pet Damage Stats Processing
+            var allPetHits = selectedFights.SelectMany(f => f.PetHits).ToList();
+            double petTotal = allPetHits.Sum();
+            int petMax = allPetHits.Any() ? allPetHits.Max() : 0;
+            int petMin = allPetHits.Any() ? allPetHits.Min() : 0;
+            double petAvg = allPetHits.Any() ? allPetHits.Average() : 0;
+            int petMisses = selectedFights.Sum(f => f.PetMisses);
+            int petSwings = allPetHits.Count + petMisses;
+            double petHitRate = petSwings > 0 ? (double)allPetHits.Count / petSwings * 100 : 0;
+
+            SessionPetDmg.Text = $"Max: {petMax} | Min: {petMin} | Avg: {petAvg:F1}";
+            SessionPetDps.Text = $"DPS: {(totalDurationSeconds > 0 ? petTotal / totalDurationSeconds : petTotal):F2}";
+            SessionPetAcc.Text = $"Hit Rate: {petHitRate:F1}% ({allPetHits.Count} Hits / {petMisses} Misses)";
+
+            // 4. Session Individual Pets Breakdown
+            var sessionPets = new List<PetStats>();
+            var allPetsAcrossFights = selectedFights.SelectMany(f => f.Pets).ToList();
+            var groupedPets = allPetsAcrossFights
+                .GroupBy(p => !string.IsNullOrEmpty(p.Id) ? p.Id : p.Name)
+                .ToList();
+
+            foreach (var group in groupedPets)
+            {
+                var samplePet = group.First();
+                var aggregatedPet = new PetStats
+                {
+                    Id = samplePet.Id,
+                    Name = samplePet.Name,
+                    FightDurationSeconds = totalDurationSeconds
+                };
+                
+                foreach (var petInstance in group)
+                {
+                    aggregatedPet.Hits.AddRange(petInstance.Hits);
+                    aggregatedPet.Misses += petInstance.Misses;
+                }
+                
+                aggregatedPet.NotifyAllChanged();
+                sessionPets.Add(aggregatedPet);
+            }
+
+            SessionPetBreakdownList.ItemsSource = null;
+            SessionPetBreakdownList.ItemsSource = sessionPets;
+
+            // 5. Consolidated Loot Processing
+            var lootCounts = new Dictionary<string, (string DisplayName, int Quantity, bool IsStacked)>();
+
+            foreach (var lootItem in selectedFights.SelectMany(f => f.Loot))
+            {
+                string trimmed = lootItem.Trim();
+                var match = Regex.Match(trimmed, @"^(?<qty>\d+)\s+(?<name>.+)$");
+                if (match.Success)
+                {
+                    int qty = int.Parse(match.Groups["qty"].Value);
+                    string name = match.Groups["name"].Value.Trim();
+                    string key = GetLootGroupKey(name);
+                    if (key == "coins")
+                    {
+                        name = "coins";
+                    }
+                    
+                    if (lootCounts.TryGetValue(key, out var current))
+                    {
+                        string displayName = current.DisplayName;
+                        if (!displayName.EndsWith("s", StringComparison.OrdinalIgnoreCase) && name.EndsWith("s", StringComparison.OrdinalIgnoreCase))
+                        {
+                            displayName = name;
+                        }
+                        lootCounts[key] = (displayName, current.Quantity + qty, true);
+                    }
+                    else
+                    {
+                        lootCounts[key] = (name, qty, true);
+                    }
+                }
+                else
+                {
+                    string key = GetLootGroupKey(trimmed);
+                    string name = trimmed;
+                    if (key == "coins")
+                    {
+                        name = "coins";
+                    }
+                    if (lootCounts.TryGetValue(key, out var current))
+                    {
+                        string displayName = current.DisplayName;
+                        if (!displayName.EndsWith("s", StringComparison.OrdinalIgnoreCase) && name.EndsWith("s", StringComparison.OrdinalIgnoreCase))
+                        {
+                            displayName = name;
+                        }
+                        lootCounts[key] = (displayName, current.Quantity + 1, current.IsStacked);
+                    }
+                    else
+                    {
+                        lootCounts[key] = (name, 1, false);
+                    }
+                }
+            }
+
+            var consolidatedLoot = new List<string>();
+            foreach (var kvp in lootCounts.Values.OrderBy(v => v.DisplayName, StringComparer.OrdinalIgnoreCase))
+            {
+                string name = kvp.DisplayName;
+                int qty = kvp.Quantity;
+                bool isStacked = kvp.IsStacked;
+
+                if (isStacked)
+                {
+                    consolidatedLoot.Add($"{qty} {name}");
+                }
+                else
+                {
+                    consolidatedLoot.Add(qty > 1 ? $"{name} (x{qty})" : name);
+                }
+            }
+
+            SessionLootList.ItemsSource = null;
+            SessionLootList.ItemsSource = consolidatedLoot;
+        }
+
+        private static string GetLootGroupKey(string name)
+        {
+            string trimmed = name.Trim();
+            if (trimmed.Equals("gold pieces", StringComparison.OrdinalIgnoreCase) || 
+                trimmed.Equals("gold piece", StringComparison.OrdinalIgnoreCase) ||
+                trimmed.Equals("gold coins", StringComparison.OrdinalIgnoreCase) ||
+                trimmed.Equals("gold coin", StringComparison.OrdinalIgnoreCase) ||
+                trimmed.Equals("coins", StringComparison.OrdinalIgnoreCase) ||
+                trimmed.Equals("coin", StringComparison.OrdinalIgnoreCase))
+            {
+                return "coins";
+            }
+            if (trimmed.EndsWith("ies", StringComparison.OrdinalIgnoreCase))
+            {
+                return trimmed.Substring(0, trimmed.Length - 3).ToLowerInvariant() + "y";
+            }
+            if (trimmed.EndsWith("s", StringComparison.OrdinalIgnoreCase) && !trimmed.EndsWith("ss", StringComparison.OrdinalIgnoreCase))
+            {
+                return trimmed.Substring(0, trimmed.Length - 1).ToLowerInvariant();
+            }
+            return trimmed.ToLowerInvariant();
         }
 
         private void FilterTextBox_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
@@ -392,6 +606,21 @@ namespace SobLogReader
                     }
                     return false;
                 };
+            }
+        }
+
+        private void ListBox_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+        {
+            if (!e.Handled)
+            {
+                e.Handled = true;
+                var eventArg = new MouseWheelEventArgs(e.MouseDevice, e.Timestamp, e.Delta)
+                {
+                    RoutedEvent = UIElement.MouseWheelEvent,
+                    Source = sender
+                };
+                var parent = ((FrameworkElement)sender).Parent as UIElement;
+                parent?.RaiseEvent(eventArg);
             }
         }
 
