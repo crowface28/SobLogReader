@@ -7,6 +7,7 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 using System.Windows;
+using System.Windows.Data;
 using System.Windows.Threading;
 
 namespace SobLogReader
@@ -347,6 +348,50 @@ namespace SobLogReader
                 StatsPanel.Visibility = Visibility.Visible;
                 WelcomePanel.Visibility = Visibility.Collapsed;
                 UpdateStatsView(selectedFight);
+            }
+        }
+
+        private void FilterTextBox_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
+        {
+            ApplyFilter();
+        }
+
+        private void ApplyFilter()
+        {
+            if (FilterTextBox == null) return;
+            
+            string filterText = FilterTextBox.Text.Trim();
+            ICollectionView view = CollectionViewSource.GetDefaultView(Fights);
+
+            if (string.IsNullOrEmpty(filterText))
+            {
+                view.Filter = null;
+                return;
+            }
+
+            try
+            {
+                var regex = new Regex(filterText, RegexOptions.IgnoreCase);
+                view.Filter = obj =>
+                {
+                    if (obj is Fight fight)
+                    {
+                        return regex.IsMatch(fight.MobName);
+                    }
+                    return false;
+                };
+            }
+            catch (ArgumentException)
+            {
+                // Fallback to basic case-insensitive substring search for malformed/partial regex
+                view.Filter = obj =>
+                {
+                    if (obj is Fight fight)
+                    {
+                        return fight.MobName.Contains(filterText, StringComparison.OrdinalIgnoreCase);
+                    }
+                    return false;
+                };
             }
         }
 
