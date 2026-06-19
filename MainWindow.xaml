@@ -1,7 +1,7 @@
 <Window x:Class="SobLogReader.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Combat Log Parser" Height="700" Width="1000" Background="#1E1E1E" Foreground="#D4D4D4"
+        Title="Combat Log Parser" Height="800" Width="1100" Background="#1E1E1E" Foreground="#D4D4D4"
         Icon="Assets/app_icon.ico">
     <Grid Margin="10">
         <Grid.RowDefinitions>
@@ -52,7 +52,7 @@
                             <DataTemplate>
                                 <StackPanel Margin="5">
                                     <TextBlock Text="{Binding MobName}" FontWeight="Bold"/>
-                                    <TextBlock Text="{Binding DurationStr}" FontSize="11" Foreground="#888"/>
+                                    <TextBlock Text="{Binding DurationAndStartStr}" FontSize="11" Foreground="#888"/>
                                 </StackPanel>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
@@ -75,44 +75,72 @@
                     </Grid>
 
                     <!-- Stats Panel (starts Hidden) -->
-                    <Grid x:Name="StatsPanel" Visibility="Hidden" Margin="15">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="*"/>
-                        </Grid.RowDefinitions>
+                    <ScrollViewer x:Name="StatsPanel" Visibility="Hidden" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                        <Grid Margin="15">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
 
-                        <TextBlock Grid.Row="0" x:Name="StatMobName" FontSize="24" FontWeight="Bold" Foreground="#4EC9B0" Margin="0,0,0,15"/>
+                            <TextBlock Grid.Row="0" x:Name="StatMobName" FontSize="24" FontWeight="Bold" Foreground="#4EC9B0" Margin="0,0,0,15"/>
 
-                        <UniformGrid Grid.Row="1" Columns="2" Margin="0,0,0,15">
-                            <StackPanel Margin="5">
-                                <TextBlock Text="Player Damage" FontWeight="Bold" Foreground="#C586C0"/>
-                                <TextBlock x:Name="StatPlayerDmg" Text="Max: 0 | Min: 0 | Avg: 0"/>
-                                <TextBlock x:Name="StatPlayerDps" Text="DPS: 0.0" FontWeight="SemiBold"/>
-                                <TextBlock x:Name="StatPlayerAcc" Text="Hit Rate: 0% (0 Hits / 0 Misses)"/>
+                            <UniformGrid Grid.Row="1" Columns="2" Margin="0,0,0,15">
+                                <StackPanel Margin="5">
+                                    <TextBlock Text="Player Damage" FontWeight="Bold" Foreground="#C586C0"/>
+                                    <TextBlock x:Name="StatPlayerDmg" Text="Max: 0 | Min: 0 | Avg: 0"/>
+                                    <TextBlock x:Name="StatPlayerDps" Text="DPS: 0.0" FontWeight="SemiBold"/>
+                                    <TextBlock x:Name="StatPlayerAcc" Text="Hit Rate: 0% (0 Hits / 0 Misses)"/>
+                                </StackPanel>
+
+                                <StackPanel Margin="5">
+                                    <TextBlock Text="Incoming Damage (Mob -> You)" FontWeight="Bold" Foreground="#F44336"/>
+                                    <TextBlock x:Name="StatMobDmg" Text="Max: 0 | Min: 0 | Avg: 0"/>
+                                    <TextBlock x:Name="StatMobDps" Text="DPS: 0.0" FontWeight="SemiBold"/>
+                                    <TextBlock x:Name="StatMobAcc" Text="Hit Rate: 0% (0 Hits / 0 Misses)"/>
+                                </StackPanel>
+                            </UniformGrid>
+
+                            <StackPanel Grid.Row="2" Margin="5,0,0,15">
+                                <TextBlock Text="Pet Damage (Total)" FontWeight="Bold" Foreground="#CE9178" Margin="0,0,0,2"/>
+                                <TextBlock x:Name="StatPetDmg" Text="Max: 0 | Min: 0 | Avg: 0"/>
+                                <TextBlock x:Name="StatPetDps" Text="DPS: 0.0" FontWeight="SemiBold"/>
+                                <TextBlock x:Name="StatPetAcc" Text="Hit Rate: 0% (0 Hits / 0 Misses)" Margin="0,0,0,6"/>
+                                
+                                <!-- Individual Pets Breakdown -->
+                                <TextBlock Text="Pet Breakdown" FontWeight="Bold" Foreground="#CE9178" FontSize="11" Margin="0,0,0,4"/>
+                                <ItemsControl x:Name="PetBreakdownList">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Background="#2D2D30" BorderBrush="#3F3F46" BorderThickness="1" CornerRadius="4" Margin="0,0,0,6" Padding="8">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <StackPanel Grid.Column="0">
+                                                        <TextBlock Text="{Binding Name}" FontWeight="Bold" Foreground="#569CD6" FontSize="12"/>
+                                                        <TextBlock Text="{Binding DamageDetails}" FontSize="11" Foreground="#AAA" Margin="0,2,0,0"/>
+                                                        <TextBlock Text="{Binding AccuracyDetails}" FontSize="11" Foreground="#AAA"/>
+                                                    </StackPanel>
+                                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="10,0,0,0">
+                                                        <TextBlock Text="{Binding TotalDamageStr}" FontWeight="Bold" HorizontalAlignment="Right" Foreground="#D4D4D4"/>
+                                                        <TextBlock Text="{Binding DpsStr}" FontWeight="SemiBold" Foreground="#CE9178" HorizontalAlignment="Right"/>
+                                                    </StackPanel>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
                             </StackPanel>
 
-                            <StackPanel Margin="5">
-                                <TextBlock Text="Incoming Damage (Mob -> You)" FontWeight="Bold" Foreground="#F44336"/>
-                                <TextBlock x:Name="StatMobDmg" Text="Max: 0 | Min: 0 | Avg: 0"/>
-                                <TextBlock x:Name="StatMobDps" Text="DPS: 0.0" FontWeight="SemiBold"/>
-                                <TextBlock x:Name="StatMobAcc" Text="Hit Rate: 0% (0 Hits / 0 Misses)"/>
-                            </StackPanel>
-                        </UniformGrid>
+                            <TextBlock Grid.Row="3" Text="Loot Collected" FontWeight="Bold" Foreground="#DCDCAA" Margin="5,0,0,5"/>
 
-                        <StackPanel Grid.Row="2" Margin="5,0,0,15">
-                            <TextBlock Text="Pet Damage" FontWeight="Bold" Foreground="#CE9178"/>
-                            <TextBlock x:Name="StatPetDmg" Text="Max: 0 | Min: 0 | Avg: 0"/>
-                            <TextBlock x:Name="StatPetDps" Text="DPS: 0.0" FontWeight="SemiBold"/>
-                            <TextBlock x:Name="StatPetAcc" Text="Hit Rate: 0% (0 Hits / 0 Misses)"/>
-                        </StackPanel>
-
-                        <TextBlock Grid.Row="3" Text="Loot Collected" FontWeight="Bold" Foreground="#DCDCAA" Margin="5,0,0,5"/>
-
-                        <ListBox Grid.Row="4" x:Name="StatLoot" Background="#1E1E1E" BorderThickness="1" BorderBrush="#333" Foreground="#D4D4D4" ScrollViewer.VerticalScrollBarVisibility="Auto"/>
-                    </Grid>
+                            <ListBox Grid.Row="4" x:Name="StatLoot" Background="#1E1E1E" BorderThickness="1" BorderBrush="#333" Foreground="#D4D4D4" ScrollViewer.VerticalScrollBarVisibility="Auto"/>
+                        </Grid>
+                    </ScrollViewer>
                 </Grid>
             </Border>
         </Grid>

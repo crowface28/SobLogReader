@@ -33,11 +33,11 @@ namespace SobLogReader
         private readonly Regex _petSpellHitRegex = new Regex(@"Your pet (?<pet>.+?)\s+(?<spell>[^\s]+)\s+hits (?<mob>.+?)\s+for (?<dmg>\d+)", RegexOptions.Compiled);
         private readonly Regex _mobHitRegex = new Regex(@"(?:from (?<mob>.+?)\s+damages you|(?<mob>.+?)\s+swings at you).*?for (?<dmg>\d+)", RegexOptions.Compiled);
         private readonly Regex _mobHitPetRegex = new Regex(@"(?:from (?<mob>.+?)\s+damages your pet|(?<mob>.+?)\s+swings at your pet).*?for (?<dmg>\d+)", RegexOptions.Compiled);
-        private readonly Regex _petHitRegex = new Regex(@"Your pet .*? swings at (?<mob>.+?)\s+for (?<dmg>\d+)", RegexOptions.Compiled);
+        private readonly Regex _petHitRegex = new Regex(@"Your pet (?<pet>.+?) swings at (?<mob>.+?)\s+for (?<dmg>\d+)", RegexOptions.Compiled);
         private readonly Regex _playerMissRegex = new Regex(@"You miss (?<mob>.+?)$", RegexOptions.Compiled);
         private readonly Regex _mobMissRegex = new Regex(@"(?<mob>.+?) misses you", RegexOptions.Compiled);
         private readonly Regex _mobMissPetRegex = new Regex(@"(?<mob>.+?) misses your pet", RegexOptions.Compiled);
-        private readonly Regex _petMissRegex = new Regex(@"Your pet .*? misses (?<mob>.+?)$", RegexOptions.Compiled);
+        private readonly Regex _petMissRegex = new Regex(@"Your pet (?<pet>.+?) misses (?<mob>.+?)$", RegexOptions.Compiled);
 
         // Regex: Extracts item names from loot actions
         private readonly Regex _lootRegex = new Regex(@"You looted (?<loot>.+)$", RegexOptions.Compiled);
@@ -212,7 +212,12 @@ namespace SobLogReader
             else if (_petSpellHitRegex.IsMatch(action))
             {
                 var m = _petSpellHitRegex.Match(action);
-                fight.PetHits.Add(int.Parse(m.Groups["dmg"].Value));
+                int dmg = int.Parse(m.Groups["dmg"].Value);
+                fight.PetHits.Add(dmg);
+                string petName = !string.IsNullOrEmpty(sourceName) ? sourceName : m.Groups["pet"].Value.Trim();
+                string petId = !string.IsNullOrEmpty(sourceID) ? sourceID : null;
+                var pet = fight.GetOrCreatePet(petId, petName);
+                pet.AddHit(dmg);
             }
             else if (_playerSpellHitRegex.IsMatch(action))
             {
@@ -232,7 +237,12 @@ namespace SobLogReader
             else if (_petHitRegex.IsMatch(action))
             {
                 var m = _petHitRegex.Match(action);
-                fight.PetHits.Add(int.Parse(m.Groups["dmg"].Value));
+                int dmg = int.Parse(m.Groups["dmg"].Value);
+                fight.PetHits.Add(dmg);
+                string petName = !string.IsNullOrEmpty(sourceName) ? sourceName : m.Groups["pet"].Value.Trim();
+                string petId = !string.IsNullOrEmpty(sourceID) ? sourceID : null;
+                var pet = fight.GetOrCreatePet(petId, petName);
+                pet.AddHit(dmg);
             }
             else if (_playerMissRegex.IsMatch(action))
             {
@@ -249,6 +259,11 @@ namespace SobLogReader
             else if (_petMissRegex.IsMatch(action))
             {
                 fight.PetMisses++;
+                var m = _petMissRegex.Match(action);
+                string petName = !string.IsNullOrEmpty(sourceName) ? sourceName : m.Groups["pet"].Value.Trim();
+                string petId = !string.IsNullOrEmpty(sourceID) ? sourceID : null;
+                var pet = fight.GetOrCreatePet(petId, petName);
+                pet.AddMiss();
             }
             else if (logType == "Loot")
             {
@@ -379,6 +394,10 @@ namespace SobLogReader
             StatPetDps.Text = $"DPS: {(fight.DurationSeconds > 0 ? petTotal / fight.DurationSeconds : petTotal):F2}";
             StatPetAcc.Text = $"Hit Rate: {petHitRate:F1}% ({fight.PetHits.Count} Hits / {fight.PetMisses} Misses)";
 
+            // Pet Breakdown Binding
+            PetBreakdownList.ItemsSource = null; // Force UI refresh
+            PetBreakdownList.ItemsSource = fight.Pets;
+
             // Loot Binding
             StatLoot.ItemsSource = null; // Force UI refresh
             StatLoot.ItemsSource = fight.Loot;
@@ -424,6 +443,12 @@ namespace SobLogReader
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(DurationSeconds));
                     OnPropertyChanged(nameof(DurationStr));
+                    OnPropertyChanged(nameof(StartTimeStr));
+                    OnPropertyChanged(nameof(DurationAndStartStr));
+                    foreach (var pet in Pets)
+                    {
+                        pet.FightDurationSeconds = DurationSeconds;
+                    }
                 }
             }
         }
@@ -439,6 +464,11 @@ namespace SobLogReader
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(DurationSeconds));
                     OnPropertyChanged(nameof(DurationStr));
+                    OnPropertyChanged(nameof(DurationAndStartStr));
+                    foreach (var pet in Pets)
+                    {
+                        pet.FightDurationSeconds = DurationSeconds;
+                    }
                 }
             }
         }
@@ -446,6 +476,8 @@ namespace SobLogReader
         // Prevents divide-by-zero exceptions for instantaneous encounters
         public double DurationSeconds => Math.Max((EndTime - StartTime).TotalSeconds, 1.0);
         public string DurationStr => $"{(int)(EndTime - StartTime).TotalSeconds}s";
+        public string StartTimeStr => StartTime.ToString("yyyy-MM-dd HH:mm:ss");
+        public string DurationAndStartStr => $"{DurationStr} - {StartTimeStr}";
 
         public List<int> PlayerHits { get; set; } = new List<int>();
         public List<int> MobHits { get; set; } = new List<int>();
@@ -455,14 +487,149 @@ namespace SobLogReader
         public int MobMisses { get; set; }
         public int PetMisses { get; set; }
 
+        public ObservableCollection<PetStats> Pets { get; set; } = new ObservableCollection<PetStats>();
+
         public List<string> Loot { get; set; } = new List<string>();
         public List<string> RawLogs { get; set; } = new List<string>();
+
+        public PetStats GetOrCreatePet(string? petId, string petName)
+        {
+            PetStats? pet = null;
+            if (!string.IsNullOrEmpty(petId))
+            {
+                pet = Pets.FirstOrDefault(p => p.Id == petId);
+            }
+            else if (!string.IsNullOrEmpty(petName))
+            {
+                pet = Pets.FirstOrDefault(p => p.Name == petName);
+            }
+
+            if (pet == null)
+            {
+                pet = new PetStats
+                {
+                    Id = petId ?? string.Empty,
+                    Name = petName ?? "Unknown Pet",
+                    FightDurationSeconds = DurationSeconds
+                };
+                Pets.Add(pet);
+            }
+            else
+            {
+                if ((string.IsNullOrEmpty(pet.Name) || pet.Name == "Unknown Pet") && !string.IsNullOrEmpty(petName))
+                {
+                    pet.Name = petName;
+                }
+                if (string.IsNullOrEmpty(pet.Id) && !string.IsNullOrEmpty(petId))
+                {
+                    pet.Id = petId;
+                }
+            }
+            return pet;
+        }
 
         public event PropertyChangedEventHandler? PropertyChanged;
 
         protected void OnPropertyChanged([CallerMemberName] string? propertyName = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
+    }
+
+    /// <summary>
+    /// Tracks combat stats for a single pet in a fight.
+    /// </summary>
+    public class PetStats : INotifyPropertyChanged
+    {
+        private string _id = string.Empty;
+        private string _name = string.Empty;
+        private int _misses;
+        private double _fightDurationSeconds = 1.0;
+
+        public string Id
+        {
+            get => _id;
+            set { _id = value; OnPropertyChanged(); }
+        }
+
+        public string Name
+        {
+            get => _name;
+            set { _name = value; OnPropertyChanged(); }
+        }
+
+        public List<int> Hits { get; set; } = new List<int>();
+
+        public int Misses
+        {
+            get => _misses;
+            set
+            {
+                _misses = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(AccuracyDetails));
+            }
+        }
+
+        public double FightDurationSeconds
+        {
+            get => _fightDurationSeconds;
+            set
+            {
+                _fightDurationSeconds = value;
+                OnPropertyChanged(nameof(DpsStr));
+            }
+        }
+
+        public int TotalDamage => Hits.Sum();
+        public int MaxDamage => Hits.Any() ? Hits.Max() : 0;
+        public int MinDamage => Hits.Any() ? Hits.Min() : 0;
+        public double AvgDamage => Hits.Any() ? Hits.Average() : 0;
+
+        public string TotalDamageStr => $"{TotalDamage} dmg";
+        public string DpsStr => $"DPS: {(FightDurationSeconds > 0 ? TotalDamage / FightDurationSeconds : TotalDamage):F2}";
+
+        public string DamageDetails => $"Max: {MaxDamage} | Min: {MinDamage} | Avg: {AvgDamage:F1}";
+
+        public string AccuracyDetails
+        {
+            get
+            {
+                int swings = Hits.Count + Misses;
+                double hitRate = swings > 0 ? (double)Hits.Count / swings * 100 : 0;
+                return $"Hit Rate: {hitRate:F1}% ({Hits.Count} Hits / {Misses} Misses)";
+            }
+        }
+
+        public void AddHit(int dmg)
+        {
+            Hits.Add(dmg);
+            NotifyAllChanged();
+        }
+
+        public void AddMiss()
+        {
+            Misses++;
+            NotifyAllChanged();
+        }
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+
+        protected void OnPropertyChanged([CallerMemberName] string? propertyName = null)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
+
+        public void NotifyAllChanged()
+        {
+            OnPropertyChanged(nameof(TotalDamage));
+            OnPropertyChanged(nameof(TotalDamageStr));
+            OnPropertyChanged(nameof(MaxDamage));
+            OnPropertyChanged(nameof(MinDamage));
+            OnPropertyChanged(nameof(AvgDamage));
+            OnPropertyChanged(nameof(DpsStr));
+            OnPropertyChanged(nameof(DamageDetails));
+            OnPropertyChanged(nameof(AccuracyDetails));
         }
     }
 }
