@@ -19,6 +19,8 @@ namespace SobLogReader
     /// </summary>
     public partial class MainWindow : Window
     {
+        public const string AppVersion = "v4.1.0";
+
         private string _logFilePath;
         private long _lastFilePosition = 0;
         private DispatcherTimer _pollTimer;
@@ -47,6 +49,7 @@ namespace SobLogReader
         public MainWindow()
         {
             InitializeComponent();
+            VersionText.Text = AppVersion;
             FightsListBox.ItemsSource = Fights;
 
             // Initialize a timer to poll the log file for new entries every 2 seconds
@@ -394,6 +397,54 @@ namespace SobLogReader
 
             SessionTitleText.Text = $"{fightCount} Fights | Total Duration: {totalDurationStr}";
 
+            // Sort selected fights chronologically by start time
+            var sortedFights = selectedFights.OrderBy(f => f.StartTime).ToList();
+            DateTime firstFightTime = sortedFights.First().StartTime;
+            DateTime lastFightTime = sortedFights.Last().EndTime;
+            TimeSpan sessionDuration = lastFightTime - firstFightTime;
+
+            // Calculate total gold from loot
+            int totalGold = 0;
+            foreach (var lootItem in selectedFights.SelectMany(f => f.Loot))
+            {
+                string trimmed = lootItem.Trim();
+                var match = Regex.Match(trimmed, @"^(?<qty>\d+)\s+(?<name>.+)$");
+                if (match.Success)
+                {
+                    int qty = int.Parse(match.Groups["qty"].Value);
+                    string name = match.Groups["name"].Value.Trim();
+                    string key = GetLootGroupKey(name);
+                    if (key == "coins")
+                    {
+                        totalGold += qty;
+                    }
+                }
+                else
+                {
+                    string key = GetLootGroupKey(trimmed);
+                    if (key == "coins")
+                    {
+                        totalGold += 1;
+                    }
+                }
+            }
+
+            // Calculate gold/hour rate
+            double goldPerHour = 0;
+            if (sessionDuration.TotalSeconds > 0)
+            {
+                goldPerHour = totalGold / sessionDuration.TotalHours;
+            }
+
+            // Display time range and gold stats
+            string timeRangeStr = firstFightTime.Date == lastFightTime.Date
+                ? $"{firstFightTime:HH:mm:ss} - {lastFightTime:HH:mm:ss}"
+                : $"{firstFightTime:yyyy-MM-dd HH:mm:ss} - {lastFightTime:yyyy-MM-dd HH:mm:ss}";
+
+            SessionGoldDurationText.Text = $"Farming Time: {FormatDuration(sessionDuration)} ({timeRangeStr})";
+            SessionTotalGoldText.Text = $"{totalGold:N0} Gold";
+            SessionGoldPerHourText.Text = $"{goldPerHour:N1} / hr";
+
             // 1. Player Damage Stats Processing
             var allPlayerHits = selectedFights.SelectMany(f => f.PlayerHits).ToList();
             double playerTotal = allPlayerHits.Sum();
@@ -540,6 +591,19 @@ namespace SobLogReader
 
             SessionLootList.ItemsSource = null;
             SessionLootList.ItemsSource = consolidatedLoot;
+        }
+
+        private static string FormatDuration(TimeSpan duration)
+        {
+            int hours = (int)duration.TotalHours;
+            int minutes = duration.Minutes;
+            int seconds = duration.Seconds;
+
+            if (hours > 0)
+                return $"{hours}h {minutes}m {seconds}s";
+            if (minutes > 0)
+                return $"{minutes}m {seconds}s";
+            return $"{seconds}s";
         }
 
         private static string GetLootGroupKey(string name)
